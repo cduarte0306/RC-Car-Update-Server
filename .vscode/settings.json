@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "thread": "cpp",
+        "buffer": "cpp",
+        "string_view": "cpp",
+        "regex": "cpp",
+        "socket": "cpp",
+        "functional": "cpp"
+    }
+}
