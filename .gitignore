@@ -42,3 +42,5 @@
 
 # Build artifacts
 build/
+
+settings.json

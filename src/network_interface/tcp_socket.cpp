@@ -12,13 +12,8 @@
 
 
 namespace Network {
-TCPSocket::TCPSocket(int sPort, int dPort) {
+TCPSocket::TCPSocket(int sPort) {
     this->sport_ = sPort;
-    this->dport_ = dPort;
-
-    // Start the data transmission thread
-    this->threadCanRun = true;
-    this->transmissionThread = std::thread(&TCPSocket::transmissionThreadHandler, this);
 }
 
 
@@ -37,43 +32,65 @@ void TCPSocket::transmissionThreadHandler(void) {
     std::memset(buffer, 0, sizeof(buffer));
 
     this->socket_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (this->socket_ < 0) {
+        perror("socket");
+        return;
+    }
 
-    sockaddr_in serverAdservaddrdress;
+    // Allow quick reuse of the address
+    int opt = 1;
+    setsockopt(this->socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = INADDR_ANY; // Listen on all available interfaces
-    servaddr.sin_port = htons(this->sport_); // Choose a port number (e.g., 8080)
+    servaddr.sin_port = htons(this->sport_); // Choose a port number
+    if (!this->ifaceAddr.empty()) {
+        inet_pton(AF_INET, this->ifaceAddr.c_str(), &servaddr.sin_addr);
+    }
 
     if (bind(this->socket_, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1) {
-        throw(0);
+        perror("bind");
+        close(this->socket_);
+        return;
     }
-    
-    while(true) {
-         // Now server is ready to listen and verification 
-        if ((listen(this->socket_, 5)) != 0) { 
-            printf("Listen failed...\n"); 
-            exit(0); 
+
+    while (this->threadCanRun) {
+        // Now server is ready to listen
+        if ((listen(this->socket_, 5)) != 0) {
+            perror("listen");
+            close(this->socket_);
+            return;
         }
-        
-        connfd = accept(this->socket_, (struct sockaddr*)&cli, &len); 
-        if (connfd < 0) { 
-            printf("server accept failed...\n"); 
-            exit(0); 
+
+        len = sizeof(cli);
+        connfd = accept(this->socket_, (struct sockaddr*)&cli, &len);
+        if (connfd < 0) {
+            perror("accept");
+            // continue accepting other connections
+            continue;
         }
-        
-        // We are connected!
-        while (true) {
-            ssize_t bytesRead = recv(this->socket_, buffer, sizeof(buffer) - 1, 0);
-            if (bytesRead < 0) {
+
+        // We are connected! read from connfd
+        while (this->threadCanRun) {
+            ssize_t bytesRead = recv(connfd, buffer, sizeof(buffer) - 1, 0);
+            if (bytesRead <= 0) {
+                if (bytesRead == 0) {
+                    // client closed connection
+                    break;
+                }
                 if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                    // Timeout occurred, just continue the loop
+                    // Non-fatal, continue
                     continue;
                 }
+                perror("recv");
+                break;
             }
 
             // Fire signal here
             onDataReceived(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(bytesRead));
         }
-        
+
+        close(connfd);
     }
 }    
 };

@@ -6,6 +6,13 @@
 
 #include <functional>
 #include <thread>
+#include <optional>
+
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
 #include <boost/signals2.hpp> // Added for boost signals
 
@@ -30,6 +37,10 @@ public:
         
     }
 
+    virtual int start(const char* interface) {
+        return -1;
+    }
+
 protected:
     bool threadCanRun = true;
 
@@ -41,6 +52,41 @@ protected:
     
     // Signal to notify when data is received
     void processRequest(const uint8_t* pData, size_t length);
+
+    std::optional<std::string> findInterface(const char* name) {
+        if (!name) {
+            return std::nullopt;
+        }
+
+        struct ifaddrs* ifaddr = nullptr;
+        if (getifaddrs(&ifaddr) == -1) {
+            perror("getifaddrs");
+            return std::nullopt;
+        }
+
+        std::string ipAddress;
+        for (struct ifaddrs* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == nullptr) continue;
+
+            if (ifa->ifa_addr->sa_family == AF_INET &&
+                std::string(ifa->ifa_name) == name) {
+                char host[NI_MAXHOST];
+                int s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+                                    host, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+                if (s == 0) {
+                    ipAddress = host;
+                    break;
+                }
+            }
+        }
+        freeifaddrs(ifaddr);
+
+        if (ipAddress.empty()) {
+            return std::nullopt;
+        }
+
+        return ipAddress;
+    }
 };
 
 
