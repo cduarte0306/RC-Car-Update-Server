@@ -88,7 +88,12 @@
         "netfwd": "cpp",
         "socket": "cpp",
         "timer": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "charconv": "cpp",
+        "complex": "cpp",
+        "source_location": "cpp",
+        "typeindex": "cpp",
+        "format": "cpp"
     },
     "cmake.buildArgs": ["-j16"]
 }

@@ -27,7 +27,7 @@ public:
 
     }
 
-    virtual bool transmit(uint8_t* pBuf, size_t length) {
+    virtual bool transmit(const uint8_t* pBuf, size_t length) {
         return true;   
     }
 
