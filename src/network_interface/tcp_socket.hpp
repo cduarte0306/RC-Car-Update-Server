@@ -1,5 +1,5 @@
-#ifndef UDP_SOCKET_HPP
-#define UDP_SOCKET_HPP
+#ifndef TCP_SOCKET_HPP
+#define TCP_SOCKET_HPP
 
 #include <cstddef>
 #include <unistd.h>
@@ -16,6 +16,7 @@ public:
     ~TCPSocket();
 
     void transmissionThreadHandler(void) override;
+    bool transmit(const uint8_t* pBuf, size_t length) override;
     int start(const char* interface) override {
         if (!interface) return -1;
         
@@ -25,9 +26,9 @@ public:
         }
 
         ifaceAddr = ifaceOpt.value();
-        this->transmissionThread = std::thread(&TCPSocket::transmissionThreadHandler, this);
-        // Start the data transmission thread
+        // Ensure the flag is set before launching the thread so the thread sees the correct state immediately
         this->threadCanRun = true;
+        this->transmissionThread = std::thread(&TCPSocket::transmissionThreadHandler, this);
         return 0;
     }
 private:
@@ -38,7 +39,7 @@ private:
     std::string ifaceAddr  = "";
     int socket_ = -1;
 
-    bool threadCanRun = true;
+    // Use the `threadCanRun` flag from the base `Sockets` class (do not shadow it here).
     struct sockaddr_in lastClientAddress;
 private:
         std::mutex swupdateProgressMutex;

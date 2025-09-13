@@ -20,8 +20,16 @@ TCPSocket::TCPSocket(int sPort) {
 
 
 TCPSocket::~TCPSocket() {
+    // Signal thread to stop and close listening socket to unblock accept()
     this->threadCanRun = false;
-    this->transmissionThread.join();
+    if (this->socket_ != -1) {
+        close(this->socket_);
+        this->socket_ = -1;
+    }
+
+    if (this->transmissionThread.joinable()) {
+        this->transmissionThread.join();
+    }
 }
 
 
@@ -56,17 +64,28 @@ void TCPSocket::transmissionThreadHandler(void) {
         return;
     }
 
-    while (this->threadCanRun) {
-        // Now server is ready to listen
-        if ((listen(this->socket_, 5)) != 0) {
-            perror("listen");
-            close(this->socket_);
-            return;
-        }
+    // Start listening once
+    if ((listen(this->socket_, 5)) != 0) {
+        perror("listen");
+        close(this->socket_);
+        return;
+    }
 
+    while (this->threadCanRun) {
         len = sizeof(cli);
         connfd = accept(this->socket_, (struct sockaddr*)&cli, &len);
         if (connfd < 0) {
+            // If accept was interrupted because we closed the listening socket during shutdown,
+            // break the loop and exit gracefully.
+            if (errno == EBADF || errno == EINVAL) {
+                break;
+            }
+
+            // If we got interrupted by signal, continue.
+            if (errno == EINTR) {
+                continue;
+            }
+
             perror("accept");
             // continue accepting other connections
             continue;
@@ -75,6 +94,12 @@ void TCPSocket::transmissionThreadHandler(void) {
         std::cout << "INFO: Connection accepted\r\n";
 
         // We are connected! read from connfd
+        // Set a receive timeout so that recv() doesn't block forever and the thread can stop responsively
+        struct timeval tv;
+        tv.tv_sec = 1;  // 1 second timeout
+        tv.tv_usec = 0;
+        setsockopt(connfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+
         while (this->threadCanRun) {
             ssize_t bytesRead = recv(connfd, buffer, sizeof(buffer) - 1, 0);
             if (bytesRead <= 0) {
@@ -86,6 +111,12 @@ void TCPSocket::transmissionThreadHandler(void) {
                     // Non-fatal, continue
                     continue;
                 }
+
+                // If recv returned -1 due to timeout, loop back to check threadCanRun
+                if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR) {
+                    continue;
+                }
+
                 perror("recv");
                 break;
             }
@@ -97,6 +128,18 @@ void TCPSocket::transmissionThreadHandler(void) {
         close(connfd);
         std::cout << "INFO: Connection closed\r\n";
     }
-}    
+}
+
+
+bool TCPSocket::transmit(const uint8_t* pBuf, size_t length) {
+    if (!pBuf) {
+        return false;
+    }
+
+    send(t)
+    
+    return true;
+}
+
 };
 

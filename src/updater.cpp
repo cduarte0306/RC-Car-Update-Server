@@ -43,7 +43,17 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
 
     // Convert to JSON
     std::string request = std::string(reinterpret_cast<const char*>(pData), length);
-    nlohmann::json requestJ = nlohmann::json::parse(request);
+    nlohmann::json requestJ;
+    try
+    {
+        requestJ = nlohmann::json::parse(request);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return;
+    }
+    
     nlohmann::json reply;
 
     // Parse the JSON request and generate a reponse
@@ -57,8 +67,10 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
             int ret = open(updateFileUpdateLoc, O_RDONLY);
             if (ret >= 0) {
                 struct swupdate_request req;
-                ret = swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
-                                    &Updater::updateEnd, &req, sizeof(req));
+                ret = 0;//swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
+                        //           &Updater::updateEnd, &req, sizeof(req));
+                std::cout << "INFO: Initiating update\r\n";
+                
                 if (ret < 0) {
                     reply["status"] = false;    
                 } else {
@@ -74,7 +86,7 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
         }
         case Updater::READ_UPDATE_STATUS:{
             bool canProcess = true;
-            
+            std::cout << "INFO: Reading status\r\n";
             {
                 std::lock_guard<std::mutex> lock(updateMutex);
                 if (Updater::status->magic != IPC_MAGIC) {
@@ -84,7 +96,6 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
             }
 
             if (canProcess) {
-                
                 reply["status"] = true;
             }
             break;

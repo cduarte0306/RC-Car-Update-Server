@@ -41,7 +41,4 @@ set_target_properties(SWUpdate::Client PROPERTIES
 # (Optional) expose headers project-wide
 include_directories("${SWUPDATE_INCLUDE_DIR}")
 
-set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
-
-
 add_subdirectory(src)
