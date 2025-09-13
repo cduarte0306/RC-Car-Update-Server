@@ -53,6 +53,28 @@ EOF
 
     echo "[!] gdbserver never opened port ${PORT}"
     exit 1
+    
+elif [[ "$MODE" == "upload" ]]; then
+    echo "[*] Selected MODE: Upload only"
+
+    # ensure the built binary exists
+    if [[ ! -f "$APP" ]]; then
+        echo "[!] App not found: $APP"
+        echo "[*] Try building first or pass path to existing binary."
+        exit 1
+    fi
+    cd build
+    make -j"$(nproc)" && cd .. \
+        || { echo "[!] Build failed"; exit 1; }
+
+    ssh "${JETSON_USER}@${JETSON_IP}" "killall -9 rc-car-updater || true"
+
+    echo "[*] Uploading app to Jetson..."
+    scp "$APP" "${JETSON_USER}@${JETSON_IP}:${JETSON_TARGET_DIR}/" \
+        || { echo "[!] SCP failed"; exit 1; }
+
+    echo "[*] Upload complete: ${REMOTE_APP_PATH}"
+    exit 0
 
 else
     echo "Usage: $0 [local|remote]"

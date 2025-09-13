@@ -6,8 +6,13 @@
 #include "updater.hpp"
 #include <chrono>
 
+#include <iostream>
+
 
 int main(int argc, char* argv[]) {
+    std::cout << "Updater started\r\n";
+    std::cout << "Version: 1.0.0\r\n";
+    
     Updater updater;
     
     while(true){
@@ -16,3 +21,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+

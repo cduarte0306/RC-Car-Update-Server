@@ -10,6 +10,8 @@
 #include <thread>
 #include <cstring>
 
+#include <iostream>
+
 
 namespace Network {
 TCPSocket::TCPSocket(int sPort) {
@@ -70,6 +72,8 @@ void TCPSocket::transmissionThreadHandler(void) {
             continue;
         }
 
+        std::cout << "INFO: Connection accepted\r\n";
+
         // We are connected! read from connfd
         while (this->threadCanRun) {
             ssize_t bytesRead = recv(connfd, buffer, sizeof(buffer) - 1, 0);
@@ -91,6 +95,7 @@ void TCPSocket::transmissionThreadHandler(void) {
         }
 
         close(connfd);
+        std::cout << "INFO: Connection closed\r\n";
     }
 }    
 };
