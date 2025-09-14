@@ -34,7 +34,6 @@ TCPSocket::~TCPSocket() {
 
 
 void TCPSocket::transmissionThreadHandler(void) {
-    int connfd = -1;
     struct sockaddr_in servaddr, cli;
     socklen_t len;
 
@@ -136,7 +135,10 @@ bool TCPSocket::transmit(const uint8_t* pBuf, size_t length) {
         return false;
     }
 
-    send(t)
+    int ret = send(this->connfd, pBuf, length, 0);
+    if (ret < 0) {
+        std::cerr << "Error sending data" << std::endl;
+    }
     
     return true;
 }

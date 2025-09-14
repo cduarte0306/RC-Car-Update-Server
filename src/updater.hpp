@@ -26,12 +26,11 @@ private:
 
     static constexpr int         webServerPort       = 5000;
     static constexpr int         mainAppServerPort   = 5001;
-    static constexpr const char* updateFileUpdateLoc = "/home/images/";
 
     static int fd;
     static char buf[256];
     static int endStatus;
-    static ipc_message* status;
+    static ipc_message updateStatus;
 
     Network::TCPSocket* serverWebApp= nullptr;
     Network::TCPSocket* serverMainApp = nullptr;

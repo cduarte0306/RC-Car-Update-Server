@@ -15,7 +15,7 @@
 int  Updater::fd = -1;
 char Updater::buf[256] = { 0 };
 int  Updater::endStatus = EXIT_SUCCESS;
-ipc_message* Updater::status = nullptr;
+ipc_message Updater::updateStatus;
 
 std::mutex updateMutex;
 
@@ -63,12 +63,21 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
 
     switch (command) {
         case Updater::INITIATE_UPDATE: {
+            std::string updateFileUpdateLoc = requestJ["file_path"].get<std::string>();
+            std::cout << "File path: " << updateFileUpdateLoc << "\r\n";
+
             // If the process is being started, then the file needs to be opened
-            int ret = open(updateFileUpdateLoc, O_RDONLY);
+            int ret = open(updateFileUpdateLoc.c_str(), O_RDONLY);
             if (ret >= 0) {
                 struct swupdate_request req;
-                ret = 0;//swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
-                        //           &Updater::updateEnd, &req, sizeof(req));
+                swupdate_prepare_req(&req);
+                req.source = SOURCE_WEBSERVER;
+                req.dry_run = RUN_DRYRUN;
+
+                const char *tag = "update-triggered-from-webapi";
+                strncpy(req.info, tag, sizeof(req.info)-1);
+                ret = swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
+                                 &Updater::updateEnd, &req, sizeof(req));
                 std::cout << "INFO: Initiating update\r\n";
                 
                 if (ret < 0) {
@@ -85,18 +94,16 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
             break;
         }
         case Updater::READ_UPDATE_STATUS:{
-            bool canProcess = true;
-            std::cout << "INFO: Reading status\r\n";
             {
                 std::lock_guard<std::mutex> lock(updateMutex);
-                if (Updater::status->magic != IPC_MAGIC) {
-                    reply["status"] = false;
-                    canProcess = false;
+                if (Updater::updateStatus.magic != IPC_MAGIC) {
+                    reply["status"   ] = false;
+                } else {
+                    reply["progress" ] = 0;
+                    reply["status"   ] = true;
+                    reply["update_status"] = Updater::updateStatus.data.status.current;
+                    reply["message"] = std::string(Updater::updateStatus.data.status.desc);
                 }
-            }
-
-            if (canProcess) {
-                reply["status"] = true;
             }
             break;
         }
@@ -146,12 +153,12 @@ int Updater::getUpdateProgress(ipc_message *msg) {
         return -1;
     }
 
-    // std::lock_guard<std::mutex> lock(updateMutex);
-    // status = msg;
+    std::lock_guard<std::mutex> lock(updateMutex);
+    std::memcpy(&Updater::updateStatus, msg, sizeof(ipc_message));
+
     fprintf(stdout, "Status: %d message: %s\n",
 			msg->data.status.current,
 			strlen(msg->data.status.desc) > 0 ? msg->data.status.desc : "");
-
 
     return 0;
 }

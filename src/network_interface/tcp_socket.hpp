@@ -38,6 +38,7 @@ private:
 
     std::string ifaceAddr  = "";
     int socket_ = -1;
+    int connfd = -1;
 
     // Use the `threadCanRun` flag from the base `Sockets` class (do not shadow it here).
     struct sockaddr_in lastClientAddress;
