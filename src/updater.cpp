@@ -69,6 +69,8 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
             // If the process is being started, then the file needs to be opened
             int ret = open(updateFileUpdateLoc.c_str(), O_RDONLY);
             if (ret >= 0) {
+                Updater::fd = ret;
+
                 struct swupdate_request req;
                 swupdate_prepare_req(&req);
                 req.source = SOURCE_WEBSERVER;
@@ -76,6 +78,7 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
 
                 const char *tag = "update-triggered-from-webapi";
                 strncpy(req.info, tag, sizeof(req.info)-1);
+                
                 ret = swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
                                  &Updater::updateEnd, &req, sizeof(req));
                 std::cout << "INFO: Initiating update\r\n";
@@ -99,7 +102,6 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
                 if (Updater::updateStatus.magic != IPC_MAGIC) {
                     reply["status"   ] = false;
                 } else {
-                    reply["progress" ] = 0;
                     reply["status"   ] = true;
                     reply["update_status"] = Updater::updateStatus.data.status.current;
                     reply["message"] = std::string(Updater::updateStatus.data.status.desc);
