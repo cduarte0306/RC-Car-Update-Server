@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <queue>
 
 #include "network_ipc.h"
 
@@ -18,6 +19,7 @@ int  Updater::endStatus = EXIT_SUCCESS;
 ipc_message Updater::updateStatus;
 
 std::mutex updateMutex;
+std::queue<ipc_message> messageQueue;
 
 
 Updater::Updater() {
@@ -61,10 +63,18 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
     const uint8_t command = requestJ["command"].get<uint8_t>();
     int ret;
 
+    reply["status"]        = false;
+    reply["update_status"] = -1;
+    reply["message"]       = "";
+
     switch (command) {
         case Updater::INITIATE_UPDATE: {
             std::string updateFileUpdateLoc = requestJ["file_path"].get<std::string>();
             std::cout << "File path: " << updateFileUpdateLoc << "\r\n";
+
+            while(!messageQueue.empty()) {
+                messageQueue.pop();
+            }
 
             // If the process is being started, then the file needs to be opened
             int ret = open(updateFileUpdateLoc.c_str(), O_RDONLY);
@@ -74,7 +84,7 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
                 struct swupdate_request req;
                 swupdate_prepare_req(&req);
                 req.source = SOURCE_WEBSERVER;
-                req.dry_run = RUN_DRYRUN;
+                req.dry_run = RUN_INSTALL;
 
                 const char *tag = "update-triggered-from-webapi";
                 strncpy(req.info, tag, sizeof(req.info)-1);
@@ -88,10 +98,6 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
                 } else {
                     reply["status"] = true;
                 }
-            } else {
-                // Report failure to log
-
-                reply["status"] = false;
             }
 
             break;
@@ -99,12 +105,13 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
         case Updater::READ_UPDATE_STATUS:{
             {
                 std::lock_guard<std::mutex> lock(updateMutex);
-                if (Updater::updateStatus.magic != IPC_MAGIC) {
-                    reply["status"   ] = false;
-                } else {
-                    reply["status"   ] = true;
-                    reply["update_status"] = Updater::updateStatus.data.status.current;
-                    reply["message"] = std::string(Updater::updateStatus.data.status.desc);
+                reply["status"   ] = true;
+
+                if (!messageQueue.empty()) {
+                    ipc_message msg = messageQueue.front();
+                    reply["update_status"] = msg.data.status.current;
+                    reply["message"] = std::string(msg.data.status.desc);
+                    messageQueue.pop();
                 }
             }
             break;
@@ -156,7 +163,10 @@ int Updater::getUpdateProgress(ipc_message *msg) {
     }
 
     std::lock_guard<std::mutex> lock(updateMutex);
-    std::memcpy(&Updater::updateStatus, msg, sizeof(ipc_message));
+    // std::memcpy(&Updater::updateStatus, msg, sizeof(ipc_message));  
+    if (strlen(msg->data.status.desc) > 0) {
+        messageQueue.push(*msg);
+    }
 
     fprintf(stdout, "Status: %d message: %s\n",
 			msg->data.status.current,
