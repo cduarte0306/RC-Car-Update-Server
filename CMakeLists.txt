@@ -8,8 +8,8 @@ find_package(Boost REQUIRED COMPONENTS system filesystem thread)
 include_directories(${Boost_INCLUDE_DIRS})
 
 # Ensure you sourced environment-setup-*
-if (NOT DEFINED ENV{SDKTARGETSYSROOT})
-  message(FATAL_ERROR "SDKTARGETSYSROOT is not set. Source your Yocto SDK env.")
+if(NOT DEFINED CMAKE_SYSROOT AND NOT DEFINED ENV{SDKTARGETSYSROOT})
+  message(FATAL_ERROR "No sysroot defined. Are you building outside Yocto SDK or BitBake?")
 endif()
 
 # Headers live directly under usr/include for IPC API
