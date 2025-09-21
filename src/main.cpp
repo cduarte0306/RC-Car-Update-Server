@@ -8,10 +8,13 @@
 
 #include <iostream>
 
+#include "version.h"
+
 
 int main(int argc, char* argv[]) {
+    
     std::cout << "Updater started\r\n";
-    std::cout << "Version: 1.0.0\r\n";
+    std::cout << "Version: " << VERSION_MAJOR << "." << VERSION_MINOR<< "." << VERSION_BUILD << "\r\n";
     
     Updater updater;
     
