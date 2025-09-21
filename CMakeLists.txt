@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Boost REQUIRED COMPONENTS system filesystem thread)
 include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Ensure you sourced environment-setup-*
 if(NOT DEFINED CMAKE_SYSROOT AND NOT DEFINED ENV{SDKTARGETSYSROOT})
