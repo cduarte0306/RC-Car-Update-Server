@@ -4,18 +4,18 @@
 #include <thread>
 #include <string>
 #include <mutex>
+#include "nlohmann/json.hpp"
 
-#include "network_interface/tcp_socket.hpp"
+#include "lib/MessageLib.hpp"
+#include "network_interface/TcpServer.hpp"
 #include "network_ipc.h"
-
+#include "network_interface/Proxy.hpp"
 
 class Updater {
 public:
     Updater();
 
-    ~Updater() {
-        
-    }
+    ~Updater();
 
     void joinThread(void);
 private:
@@ -32,14 +32,17 @@ private:
     static int endStatus;
     static ipc_message updateStatus;
 
-    Network::TCPSocket* serverWebApp= nullptr;
-    Network::TCPSocket* serverMainApp = nullptr;
+    Proxy* mProxy = nullptr;
+    Msg::CircularBuffer<nlohmann::json> mMessageBuffer;
+
+    Network::TcpServer* serverWebApp  = nullptr;
+    Network::TcpServer* serverMainApp = nullptr;
     std::thread mainThread;
 
     static int writeImage(char **p, int *size);
     static int getUpdateProgress(ipc_message *msg);
     static int updateEnd(RECOVERY_STATUS status);
-    
+
     void processRequest(const uint8_t* pData, size_t length);
     void mainProcess();
 };

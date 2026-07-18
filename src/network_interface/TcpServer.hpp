@@ -1,0 +1,56 @@
+#ifndef TcpServer_HPP
+#define TcpServer_HPP
+
+#include <cstddef>
+#include <unistd.h>
+
+#include <atomic>
+#include <mutex>
+
+#include "sockets.hpp"
+
+namespace Network {
+
+class TcpServer : public Sockets {
+public:
+    TcpServer(boost::asio::io_context& io_context, std::string adapter, std::string fallbackAdapter, unsigned short sPort, unsigned short dPort, size_t bufferSize=1024, bool broadcast=false);
+    ~TcpServer();
+
+    bool receive(uint8_t* pBuf, size_t length) override;
+
+    bool transmit(const uint8_t* pBuf, size_t length) override;
+
+    bool openSocket(std::string& adapterName, int sPort, int dPort, size_t bufferSize=1024, bool broadcast=false) override;
+    int close() override;
+    virtual void startReceive(std::function<void(std::vector<char>&)> dataReceivedCallback_) override;
+    int acceptConnection();
+    void onConnectionEstablished(std::function<void(void)> callback);
+
+private:
+    void beginAccept();
+
+    std::function<void(void)> connectionEstablishedCallback_;
+    void startReceive_(void);
+    
+    boost::asio::ip::tcp::acceptor acceptor_;
+    boost::asio::ip::tcp::socket clientSocket_;
+
+    std::string getNetMask(std::string& iface);
+
+    static constexpr int BUFFER_SIZE = 1024;
+    static constexpr int MAX_CONNECTIONS = 10;
+    static constexpr int TIMEOUT = 5000;
+
+    bool threadCanRun = true;
+    std::atomic<bool> acceptInProgress_{false};
+
+    bool m_Broadcast{false};
+
+    std::string m_BroadcastIP{""};
+
+    bool m_HostFound{false};
+};
+
+}
+
+#endif

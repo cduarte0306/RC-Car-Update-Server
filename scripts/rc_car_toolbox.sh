@@ -13,7 +13,15 @@ GDBSERVER_PATH="/usr/bin/gdbserver"    # explicit path
 
 MODE="$1"
 
-if [[ "$MODE" == "local" ]]; then
+
+if [[ "$MODE" == "build" ]]; then
+    # Create build directory if it doesn't exist
+    mkdir -p build
+    cd build
+    cmake ..
+    make -j"$(nproc)" && cd .. \
+        || { echo "[!] Build failed"; exit 1; }
+elif [[ "$MODE" == "local" ]]; then
     echo "[*] Selected MODE: QEMU (local)"
     # ... (your unchanged local branch) ...
     # [keep your existing QEMU + wait-for-port logic here]

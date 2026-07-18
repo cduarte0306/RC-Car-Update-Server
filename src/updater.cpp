@@ -1,5 +1,5 @@
 #include "updater.hpp"
-#include "network_interface/tcp_socket.hpp"
+#include "network_interface/TcpServer.hpp"
 #include <boost/signals2.hpp> // Added for boost signals
 #include <boost/bind/bind.hpp>
 #include <nlohmann/json.hpp>
@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <iostream>
 #include <queue>
+
+#include "utils/logger.hpp"
 
 #include "network_ipc.h"
 
@@ -22,24 +24,34 @@ std::mutex updateMutex;
 std::queue<ipc_message> messageQueue;
 
 
-Updater::Updater() {
-    this->serverWebApp  = new Network::TCPSocket(this->webServerPort);
-    this->serverMainApp = new Network::TCPSocket(this->mainAppServerPort);
+Updater::Updater() : mMessageBuffer(256) {
+    // this->serverWebApp  = new Network::TcpServer(this->webServerPort);
+    // this->serverMainApp = new Network::TcpServer(this->mainAppServerPort);
 
-    this->serverWebApp->start("lo");
-    this->serverMainApp->start("lo");
+    // this->serverWebApp->start("lo");
+    // this->serverMainApp->start("lo");
 
     // Connect the reception signals
-    this->serverWebApp->onDataReceived.connect(
-        boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
-    );
+    // this->serverWebApp->onDataReceived.connect(
+    //     boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
+    // );
+
+    // this->serverMainApp->onDataReceived.connect(
+    //     boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
+    // );
+    mProxy = new Proxy(mMessageBuffer);
+}
+
+
+Updater::~Updater() {
+    delete mProxy;
 }
 
 
 void Updater::processRequest(const uint8_t* pData, size_t length) {
     if ((!pData) && (pData[length - 1] != 0)) {
         // Log error
-        std::cout << "ERROR: Invalid message received\r\n";
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Invalid message received\r\n");
         return;
     }
 
@@ -52,10 +64,10 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
     }
     catch(const std::exception& e)
     {
-        std::cerr << e.what() << '\n';
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
         return;
     }
-    
+
     nlohmann::json reply;
 
     // Parse the JSON request and generate a reponse
@@ -70,7 +82,7 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
     switch (command) {
         case Updater::INITIATE_UPDATE: {
             std::string updateFileUpdateLoc = requestJ["file_path"].get<std::string>();
-            std::cout << "File path: " << updateFileUpdateLoc << "\r\n";
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "File path: %s\r\n", updateFileUpdateLoc.c_str());
 
             while(!messageQueue.empty()) {
                 messageQueue.pop();
@@ -91,7 +103,7 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
                 
                 ret = swupdate_async_start(&Updater::writeImage, &Updater::getUpdateProgress,
                                  &Updater::updateEnd, &req, sizeof(req));
-                std::cout << "INFO: Initiating update\r\n";
+                Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Initiating update\r\n");
                 
                 if (ret < 0) {
                     reply["status"] = false;    

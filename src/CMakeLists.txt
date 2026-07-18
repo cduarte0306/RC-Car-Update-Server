@@ -1,23 +1,44 @@
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
+set(LIB_SOURCE
+  lib/MessageLib.cpp
+)
+
 set(SOURCE
   main.cpp
-  network_interface/tcp_socket.cpp
+  network_interface/TcpServer.cpp
+  network_interface/TcpServer.hpp
+  network_interface/Proxy.hpp
+  network_interface/Proxy.cpp
   updater.cpp
+  utils/logger.hpp
+  utils/logger.cpp
 )
+
+include(FetchContent)
+
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG        v3.11.2
+)
+
+FetchContent_MakeAvailable(json)
+
+
 
 add_executable(${PROJECT_NAME} ${SOURCE})
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/json/single_include)
-
 target_include_directories(${PROJECT_NAME} PRIVATE
-  ${CMAKE_SOURCE_DIR}/external/json/include
-  ${CMAKE_SOURCE_DIR}/external/json/include/lib
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/src/
 )
 
 target_link_libraries(${PROJECT_NAME}
   SWUpdate::Client
+  nlohmann_json::nlohmann_json
+  systemd
   ${Boost_LIBRARIES}
   pthread            # usually pulled transitively, but harmless to add
 )
