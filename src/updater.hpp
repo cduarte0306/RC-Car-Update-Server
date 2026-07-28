@@ -4,11 +4,13 @@
 #include <thread>
 #include <string>
 #include <mutex>
+#include <atomic>
 #include "nlohmann/json.hpp"
 
 #include "lib/MessageLib.hpp"
 #include "network_interface/TcpServer.hpp"
 #include "network_ipc.h"
+#include "progress_ipc.h"
 #include "network_interface/Proxy.hpp"
 
 class Updater {
@@ -18,6 +20,16 @@ public:
     ~Updater();
 
     void joinThread(void);
+
+    /**
+     * @brief Get the last known installation progress reported by swupdate
+     *
+     * @return unsigned int Installation percentage of the current step (0-100)
+     */
+    unsigned int getInstallPercentage(void) const {
+        return this->installPercent.load();
+    }
+
 private:
     enum {
         INITIATE_UPDATE,
@@ -39,12 +51,18 @@ private:
     Network::TcpServer* serverMainApp = nullptr;
     std::thread mainThread;
 
+    std::thread progressThread;
+    std::atomic<bool> progressThreadRunning{true};
+    std::atomic<int> progressSocketFd{-1};
+    std::atomic<unsigned int> installPercent{0};
+
     static int writeImage(char **p, int *size);
     static int getUpdateProgress(ipc_message *msg);
     static int updateEnd(RECOVERY_STATUS status);
 
     void processRequest(const uint8_t* pData, size_t length);
     void mainProcess();
+    void progressThreadHandler(void);
 };
 
 #endif

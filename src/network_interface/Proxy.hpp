@@ -36,7 +36,7 @@ public:
     }
 private:
     enum {
-        LocalRouteAddr   = 0x01, /*!< Local application route address */
+        UpdaterRouteAddr = 0x01, /*!< Local application route address */
         WebAppRouteAddr  = 0x02, /*!< Web application route address */
         MainAppRouteAddr = 0x03  /*!< Main application route address */
     };

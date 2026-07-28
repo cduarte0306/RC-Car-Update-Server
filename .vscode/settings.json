@@ -95,5 +95,6 @@
         "typeindex": "cpp",
         "format": "cpp"
     },
-    "cmake.buildArgs": ["-j16"]
+    "cmake.buildArgs": ["-j16"],
+    "cmake.generator": "Unix Makefiles"
 }

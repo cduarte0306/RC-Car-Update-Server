@@ -17,28 +17,36 @@
 #include <vector>
 
 Proxy::Proxy(Msg::CircularBuffer<nlohmann::json>& buff)
-    : messageBuffer(buff) {
-    m_MainAppSocket = new Network::TcpServer(io_context, "lo", "lo", MAIN_APP_PROXY_PORT, MAIN_APP_PROXY_PORT);
-    m_WebAppSocket  = new Network::TcpServer(io_context, "lo", "lo", WEB_APP_PROXY_PORT, WEB_APP_PROXY_PORT);
+    : messageBuffer(buff)
+{
+    m_MainAppSocket = new Network::TcpServer(io_context, "lo", "lo", MAIN_APP_PROXY_PORT, 0);
+    m_WebAppSocket  = new Network::TcpServer(io_context, "lo", "lo", WEB_APP_PROXY_PORT,  0);
 
+    m_MainAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
+    m_WebAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
     threadPool.create_thread([this]() { io_context.run(); });
 }
 
 
-Proxy::~Proxy() {
-    if (m_MainAppSocket) {
+Proxy::~Proxy()
+{
+    if (m_MainAppSocket)
+    {
         delete m_MainAppSocket;
         m_MainAppSocket = nullptr;
     }
-    if (m_WebAppSocket) {
+    if (m_WebAppSocket)
+    {
         delete m_WebAppSocket;
         m_WebAppSocket = nullptr;
     }
     threadPool.join_all();
 }
 
-int Proxy::processRequest(std::vector<char>& data) {
-    if (data.size() < sizeof(ProxyMsgHdr)) {
+int Proxy::processRequest(std::vector<char>& data)
+{
+    if (data.size() < sizeof(ProxyMsgHdr))
+    {
         return -1;
     }
 
@@ -49,16 +57,19 @@ int Proxy::processRequest(std::vector<char>& data) {
     using json = nlohmann::json;
     
     // Route the request based on the destination address in the header
-    switch (header->destAddr) {
-        case LocalRouteAddr:
+    switch (header->destAddr)
+    {
+        case UpdaterRouteAddr:
         {
             // Handle local route
             json msg;
-            
-            try {
+
+            try
+            {
                 msg = json::parse(payload, payload + payloadLength);
             }
-            catch(const std::exception& e) {
+            catch(const std::exception& e)
+            {
                 Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
                 return -1; // Return error if JSON parsing fails
             }

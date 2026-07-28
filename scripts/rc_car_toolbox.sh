@@ -7,7 +7,7 @@ PORT=2345
 
 JETSON_IP="192.168.1.10"
 JETSON_USER="root"
-JETSON_TARGET_DIR="/home/root"
+JETSON_TARGET_DIR="/tmp/rc-car-updater"
 REMOTE_APP_PATH="${JETSON_TARGET_DIR}/rc-car-updater"
 GDBSERVER_PATH="/usr/bin/gdbserver"    # explicit path
 
@@ -76,6 +76,10 @@ elif [[ "$MODE" == "upload" ]]; then
         || { echo "[!] Build failed"; exit 1; }
 
     ssh "${JETSON_USER}@${JETSON_IP}" "killall -9 rc-car-updater || true"
+
+    # Check dir exists
+    # Ensure target directory exists on the remote Jetson
+    ssh "${JETSON_USER}@${JETSON_IP}" "if [ -d '${JETSON_TARGET_DIR}' ]; then echo 'Exists'; else echo 'Does not exist'; echo '[*] Creating directory: ${JETSON_TARGET_DIR}'; mkdir -p '${JETSON_TARGET_DIR}'; fi" || { echo "[!] Remote directory setup failed"; exit 1; }
 
     echo "[*] Uploading app to Jetson..."
     scp "$APP" "${JETSON_USER}@${JETSON_IP}:${JETSON_TARGET_DIR}/" \

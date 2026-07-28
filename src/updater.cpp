@@ -4,15 +4,18 @@
 #include <boost/bind/bind.hpp>
 #include <nlohmann/json.hpp>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
 #include <queue>
+#include <chrono>
 
 #include "utils/logger.hpp"
 
 #include "network_ipc.h"
+#include "progress_ipc.h"
 
 
 int  Updater::fd = -1;
@@ -40,11 +43,64 @@ Updater::Updater() : mMessageBuffer(256) {
     //     boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
     // );
     mProxy = new Proxy(mMessageBuffer);
+
+    progressThread = std::thread(&Updater::progressThreadHandler, this);
 }
 
 
 Updater::~Updater() {
+    progressThreadRunning.store(false);
+
+    // Unblock the progress thread if it is parked in a blocking read on the progress socket
+    int fd = progressSocketFd.load();
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+    }
+
+    if (progressThread.joinable()) {
+        progressThread.join();
+    }
+
     delete mProxy;
+}
+
+
+/**
+ * @brief Connects to swupdate's Progress socket and keeps installPercent up to date.
+ *
+ * The status callback wired up via swupdate_async_start() (getUpdateProgress) only carries
+ * a state code and a text description; swupdate reports install percentage separately via
+ * its Progress socket (progress_ipc.h), which this thread subscribes to independently of
+ * whichever process actually triggered the update.
+ */
+void Updater::progressThreadHandler(void) {
+    struct progress_msg msg;
+    int connfd = -1;
+
+    while (progressThreadRunning.load()) {
+        if (connfd < 0) {
+            connfd = progress_ipc_connect(false);
+            progressSocketFd.store(connfd);
+
+            if (connfd < 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                continue;
+            }
+        }
+
+        int ret = progress_ipc_receive(&connfd, &msg);
+        progressSocketFd.store(connfd);
+
+        if (ret <= 0) {
+            continue;
+        }
+
+        installPercent.store(msg.cur_percent);
+    }
+
+    if (connfd >= 0) {
+        close(connfd);
+    }
 }
 
 
