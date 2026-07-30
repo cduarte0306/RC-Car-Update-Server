@@ -11,7 +11,7 @@
 
 
 int main(int argc, char* argv[]) {
-    Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "RC Car Update Server Version: %u.%u.%u", VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD);
+    Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "RC Car Update Server Version: %u.%u.%u\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD);
     Updater updater;
     
     while(true){

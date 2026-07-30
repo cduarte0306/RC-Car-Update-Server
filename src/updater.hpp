@@ -53,6 +53,7 @@ private:
 
     std::thread progressThread;
     std::atomic<bool> progressThreadRunning{true};
+    std::atomic<bool> mainThreadRunning{true};
     std::atomic<int> progressSocketFd{-1};
     std::atomic<unsigned int> installPercent{0};
 
@@ -60,8 +61,7 @@ private:
     static int getUpdateProgress(ipc_message *msg);
     static int updateEnd(RECOVERY_STATUS status);
 
-    void processRequest(const uint8_t* pData, size_t length);
-    void mainProcess();
+    void processRequest(nlohmann::json& requestJ);
     void progressThreadHandler(void);
 };
 

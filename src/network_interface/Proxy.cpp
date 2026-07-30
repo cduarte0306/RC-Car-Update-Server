@@ -22,8 +22,16 @@ Proxy::Proxy(Msg::CircularBuffer<nlohmann::json>& buff)
     m_MainAppSocket = new Network::TcpServer(io_context, "lo", "lo", MAIN_APP_PROXY_PORT, 0);
     m_WebAppSocket  = new Network::TcpServer(io_context, "lo", "lo", WEB_APP_PROXY_PORT,  0);
 
+    m_MainAppSocket->setOnConnectionEstablished(
+        [this]() { Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Main app connection established\r\n"); }
+    );
+    m_WebAppSocket->setOnConnectionEstablished(
+        [this]() { Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Web app connection established\r\n"); }
+    );
+
     m_MainAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
     m_WebAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
+
     threadPool.create_thread([this]() { io_context.run(); });
 }
 
@@ -74,6 +82,7 @@ int Proxy::processRequest(std::vector<char>& data)
                 return -1; // Return error if JSON parsing fails
             }
 
+            msg["source"] = header->srcAddr;
             messageBuffer.push(msg);
             break;
         }
@@ -89,5 +98,54 @@ int Proxy::processRequest(std::vector<char>& data)
             Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown route address: %s", std::to_string(header->destAddr).c_str());
             return -1; // Unknown route
     }
+    return 0;
+}
+
+int Proxy::sendMessage(ProxyMessages& msg)
+{
+    int source = -1;
+    try
+    {
+        if (msg.contains("source"))
+        {
+            source = msg["source"].get<int>();
+        }
+        else
+        {
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Source not specified in message");
+            return -1; // Source not specified
+        }
+
+        msg.erase("source");
+
+        // Route
+        ProxyMsgHdr header;
+        header.srcAddr = source;
+        header.destAddr = source; // Assuming the destination is the same as the source for routing
+        std::string serialized = msg.dump();
+        std::vector<char> data(sizeof(ProxyMsgHdr) + serialized.size());
+        std::memcpy(data.data(), &header, sizeof(ProxyMsgHdr));
+        std::memcpy(data.data() + sizeof(ProxyMsgHdr), serialized.data(), serialized.size());
+        
+        if (source == WebAppRouteAddr)
+        {
+            m_WebAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+        }
+        else if (source == MainAppRouteAddr)
+        {
+            m_MainAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+        }
+        else
+        {
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown source address: %s", std::to_string(source).c_str());
+            return -1; // Unknown source
+        }
+    }
+    catch(const std::exception& e)
+    {
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
+        return -1; // Return error if JSON parsing fails
+    }
+
     return 0;
 }

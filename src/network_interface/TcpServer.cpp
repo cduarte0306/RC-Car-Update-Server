@@ -248,7 +248,6 @@ void TcpServer::beginAccept()
         if (!endpointEc)
         {
             m_HostIP = clientEndpoint.address().to_string();
-            Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Client connected: %s:%d\r\n", m_HostIP.c_str(), clientEndpoint.port());
         }
 
         Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "TCP connection established with client %s:%d\r\n",

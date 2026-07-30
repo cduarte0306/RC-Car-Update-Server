@@ -27,41 +27,47 @@ std::mutex updateMutex;
 std::queue<ipc_message> messageQueue;
 
 
-Updater::Updater() : mMessageBuffer(256) {
-    // this->serverWebApp  = new Network::TcpServer(this->webServerPort);
-    // this->serverMainApp = new Network::TcpServer(this->mainAppServerPort);
-
-    // this->serverWebApp->start("lo");
-    // this->serverMainApp->start("lo");
-
-    // Connect the reception signals
-    // this->serverWebApp->onDataReceived.connect(
-    //     boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
-    // );
-
-    // this->serverMainApp->onDataReceived.connect(
-    //     boost::bind(&Updater::processRequest, this, boost::placeholders::_1, boost::placeholders::_2)
-    // );
+Updater::Updater() : mMessageBuffer(256)
+{
     mProxy = new Proxy(mMessageBuffer);
 
     progressThread = std::thread(&Updater::progressThreadHandler, this);
+    mainThread = std::thread
+    ([this]() 
+    {
+        using json = nlohmann::json;
+        while(mainThreadRunning.load())
+        {
+            auto& json = mMessageBuffer.getHead();
+            processRequest(json);
+            mMessageBuffer.pop();
+        }
+    });
 }
 
 
-Updater::~Updater() {
+Updater::~Updater()
+{
     progressThreadRunning.store(false);
 
     // Unblock the progress thread if it is parked in a blocking read on the progress socket
     int fd = progressSocketFd.load();
-    if (fd >= 0) {
+    if (fd >= 0)
+    {
         shutdown(fd, SHUT_RDWR);
     }
 
-    if (progressThread.joinable()) {
+    if (progressThread.joinable())
+    {
         progressThread.join();
     }
 
     delete mProxy;
+
+    if (mainThread.joinable())
+    {
+        mainThread.join();
+    }
 }
 
 
@@ -73,16 +79,20 @@ Updater::~Updater() {
  * its Progress socket (progress_ipc.h), which this thread subscribes to independently of
  * whichever process actually triggered the update.
  */
-void Updater::progressThreadHandler(void) {
+void Updater::progressThreadHandler(void)
+{
     struct progress_msg msg;
     int connfd = -1;
 
-    while (progressThreadRunning.load()) {
-        if (connfd < 0) {
+    while (progressThreadRunning.load())
+    {
+        if (connfd < 0)
+        {
             connfd = progress_ipc_connect(false);
             progressSocketFd.store(connfd);
 
-            if (connfd < 0) {
+            if (connfd < 0)
+            {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 continue;
             }
@@ -91,39 +101,23 @@ void Updater::progressThreadHandler(void) {
         int ret = progress_ipc_receive(&connfd, &msg);
         progressSocketFd.store(connfd);
 
-        if (ret <= 0) {
+        if (ret <= 0)
+        {
             continue;
         }
 
         installPercent.store(msg.cur_percent);
     }
 
-    if (connfd >= 0) {
+    if (connfd >= 0)
+    {
         close(connfd);
     }
 }
 
 
-void Updater::processRequest(const uint8_t* pData, size_t length) {
-    if ((!pData) && (pData[length - 1] != 0)) {
-        // Log error
-        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Invalid message received\r\n");
-        return;
-    }
-
-    // Convert to JSON
-    std::string request = std::string(reinterpret_cast<const char*>(pData), length);
-    nlohmann::json requestJ;
-    try
-    {
-        requestJ = nlohmann::json::parse(request);
-    }
-    catch(const std::exception& e)
-    {
-        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
-        return;
-    }
-
+void Updater::processRequest(nlohmann::json& requestJ)
+{
     nlohmann::json reply;
 
     // Parse the JSON request and generate a reponse
@@ -134,19 +128,24 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
     reply["status"]        = false;
     reply["update_status"] = -1;
     reply["message"]       = "";
+    reply["source"]        = requestJ["source"].get<int>();
 
-    switch (command) {
-        case Updater::INITIATE_UPDATE: {
+    switch (command)
+    {
+        case Updater::INITIATE_UPDATE:
+        {
             std::string updateFileUpdateLoc = requestJ["file_path"].get<std::string>();
             Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "File path: %s\r\n", updateFileUpdateLoc.c_str());
 
-            while(!messageQueue.empty()) {
+            while(!messageQueue.empty())
+            {
                 messageQueue.pop();
             }
 
             // If the process is being started, then the file needs to be opened
             int ret = open(updateFileUpdateLoc.c_str(), O_RDONLY);
-            if (ret >= 0) {
+            if (ret >= 0)
+            {
                 Updater::fd = ret;
 
                 struct swupdate_request req;
@@ -161,16 +160,20 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
                                  &Updater::updateEnd, &req, sizeof(req));
                 Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Initiating update\r\n");
                 
-                if (ret < 0) {
+                if (ret < 0)
+                {
                     reply["status"] = false;    
-                } else {
+                }
+                else
+                {
                     reply["status"] = true;
                 }
             }
 
             break;
         }
-        case Updater::READ_UPDATE_STATUS:{
+        case Updater::READ_UPDATE_STATUS:
+        {
             {
                 std::lock_guard<std::mutex> lock(updateMutex);
                 reply["status"   ] = true;
@@ -189,12 +192,10 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
     }
 
     std::string replyString = reply.dump();
-    
-    // Find out which socket to reply to
-    if(sPort == this->webServerPort) {
-        this->serverWebApp->transmit(reinterpret_cast<const uint8_t*>(replyString.data()), replyString.length());
-    } else {  // Else reply to the main app
-        this->serverMainApp->transmit(reinterpret_cast<const uint8_t*>(replyString.data()), replyString.length());
+
+    if (mProxy->sendMessage(reinterpret_cast<ProxyMessages&>(reply)) < 0)
+    {
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Failed to send message via proxy.");
     }
 }
 
@@ -203,7 +204,8 @@ void Updater::processRequest(const uint8_t* pData, size_t length) {
  * @brief Called to wait for the main thread to be killed
  * 
  */
-void Updater::joinThread(void) {
+void Updater::joinThread(void)
+{
     this->mainThread.join();
 
     delete this->serverWebApp;
@@ -215,7 +217,8 @@ void Updater::joinThread(void) {
  * @brief Callback for swupdate image write
  * 
  */
-int Updater::writeImage(char **p, int *size) {
+int Updater::writeImage(char **p, int *size)
+{
     int ret;
 	ret = read(Updater::fd, Updater::buf, sizeof(Updater::buf));
 	*p = Updater::buf;
@@ -224,22 +227,24 @@ int Updater::writeImage(char **p, int *size) {
 	return ret;
 }
 
-int Updater::getUpdateProgress(ipc_message *msg) {
+int Updater::getUpdateProgress(ipc_message *msg)
+{
     // Placeholder: return 0% progress
-    if (!msg) {
+    if (!msg)
+    {
         return -1;
     }
 
     std::lock_guard<std::mutex> lock(updateMutex);
     // std::memcpy(&Updater::updateStatus, msg, sizeof(ipc_message));  
-    if (strlen(msg->data.status.desc) > 0) {
+    if (strlen(msg->data.status.desc) > 0)
+    {
         messageQueue.push(*msg);
     }
 
-    fprintf(stdout, "Status: %d message: %s\n",
-			msg->data.status.current,
-			strlen(msg->data.status.desc) > 0 ? msg->data.status.desc : "");
-
+    Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Status: %d message: %s\r\n",
+                                  msg->data.status.current,
+                                  strlen(msg->data.status.desc) > 0 ? msg->data.status.desc : "");
     return 0;
 }
 
@@ -250,22 +255,27 @@ int Updater::getUpdateProgress(ipc_message *msg) {
  * @param status 
  * @return int 
  */
-int Updater::updateEnd(RECOVERY_STATUS status) {
+int Updater::updateEnd(RECOVERY_STATUS status)
+{
     // Placeholder: simply return the status as integer
     Updater::endStatus = (status == SUCCESS) ? EXIT_SUCCESS : EXIT_FAILURE;
     
-    if  (status == SUCCESS) {
-		fprintf(stdout, "Executing post-update actions.\n");
+    if  (status == SUCCESS)
+    {
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Executing post-update actions.");        
 		ipc_message msg;
 		msg.data.procmsg.len = 0;
-		if (ipc_postupdate(&msg) != 0 || msg.type != ACK) {
-			fprintf(stderr, "Running post-update failed!\n");
+		if (ipc_postupdate(&msg) != 0 || msg.type != ACK)
+        {
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Running post-update failed!");
 			endStatus = EXIT_FAILURE;
 		}
 
         int ret = close(Updater::fd);
-        if (ret < 0) {
+        if (ret < 0)
+        {
             // Log failure to close
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Failed to close update file descriptor.");
         }
 	}
     

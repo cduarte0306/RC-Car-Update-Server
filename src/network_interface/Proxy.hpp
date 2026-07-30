@@ -23,6 +23,8 @@
 #include "lib/MessageLib.hpp"
 #include <nlohmann/json.hpp>
 
+typedef nlohmann::json ProxyMessages;
+
 class Proxy {
 public:
     Proxy(Msg::CircularBuffer<nlohmann::json>& buff);
@@ -34,6 +36,8 @@ public:
         // this->onDataReceived.connect(slot);
         return 0;
     }
+
+    int sendMessage(ProxyMessages& msg);
 private:
     enum {
         UpdaterRouteAddr = 0x01, /*!< Local application route address */
@@ -54,7 +58,7 @@ private:
 
     /**
      * @brief Process incoming proxy requests
-     * 
+     *
      * @param data Reference to the data vector containing the request
      * @return int Returns 0 on success, -1 on failure
      */

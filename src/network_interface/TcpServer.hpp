@@ -25,6 +25,20 @@ public:
     virtual void startReceive(std::function<void(std::vector<char>&)> dataReceivedCallback_) override;
     int acceptConnection();
     void onConnectionEstablished(std::function<void(void)> callback);
+    
+    template<typename T>
+    void setOnConnectionEstablished(T* instance, void (T::*OnConnectCallback)())
+    {
+        connectionEstablishedCallback_ = [instance, OnConnectCallback]()
+        {
+            return (instance->*OnConnectCallback)();
+        };
+    }
+
+    void setOnConnectionEstablished(std::function<void(void)> callback)
+    {
+        connectionEstablishedCallback_ = callback;
+    }
 
 private:
     void beginAccept();
