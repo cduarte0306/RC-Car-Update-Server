@@ -27,22 +27,12 @@ std::mutex updateMutex;
 std::queue<ipc_message> messageQueue;
 
 
-Updater::Updater() : mMessageBuffer(256)
+Updater::Updater()
 {
-    mProxy = new Proxy(mMessageBuffer);
+    mProxy = new Proxy();
+    mProxy->OnMessageReceived(std::bind(&Updater::processRequest, this, std::placeholders::_1));
 
     progressThread = std::thread(&Updater::progressThreadHandler, this);
-    mainThread = std::thread
-    ([this]() 
-    {
-        using json = nlohmann::json;
-        while(mainThreadRunning.load())
-        {
-            auto& json = mMessageBuffer.getHead();
-            processRequest(json);
-            mMessageBuffer.pop();
-        }
-    });
 }
 
 
@@ -63,11 +53,6 @@ Updater::~Updater()
     }
 
     delete mProxy;
-
-    if (mainThread.joinable())
-    {
-        mainThread.join();
-    }
 }
 
 
@@ -106,6 +91,7 @@ void Updater::progressThreadHandler(void)
             continue;
         }
 
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Progress: %d%%\r\n", msg.cur_percent);
         installPercent.store(msg.cur_percent);
     }
 
@@ -116,25 +102,24 @@ void Updater::progressThreadHandler(void)
 }
 
 
-void Updater::processRequest(nlohmann::json& requestJ)
+std::vector<char> Updater::processRequest(nlohmann::json& requestJson)
 {
     nlohmann::json reply;
 
     // Parse the JSON request and generate a reponse
-    const int sPort = requestJ["port"].get<int>();  // Extract the source port
-    const uint8_t command = requestJ["command"].get<uint8_t>();
+    const uint8_t command = requestJson["command"].get<uint8_t>();
     int ret;
 
     reply["status"]        = false;
     reply["update_status"] = -1;
     reply["message"]       = "";
-    reply["source"]        = requestJ["source"].get<int>();
+    reply["percentage"]    = 0;
 
     switch (command)
     {
         case Updater::INITIATE_UPDATE:
         {
-            std::string updateFileUpdateLoc = requestJ["file_path"].get<std::string>();
+            std::string updateFileUpdateLoc = requestJson["file_path"].get<std::string>();
             Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "File path: %s\r\n", updateFileUpdateLoc.c_str());
 
             while(!messageQueue.empty())
@@ -147,7 +132,7 @@ void Updater::processRequest(nlohmann::json& requestJ)
             if (ret >= 0)
             {
                 Updater::fd = ret;
-
+                this->installPercent.store(0);
                 struct swupdate_request req;
                 swupdate_prepare_req(&req);
                 req.source = SOURCE_WEBSERVER;
@@ -177,6 +162,7 @@ void Updater::processRequest(nlohmann::json& requestJ)
             {
                 std::lock_guard<std::mutex> lock(updateMutex);
                 reply["status"   ] = true;
+                reply["percentage"] = this->getInstallPercentage();
 
                 if (!messageQueue.empty()) {
                     ipc_message msg = messageQueue.front();
@@ -191,12 +177,10 @@ void Updater::processRequest(nlohmann::json& requestJ)
             break;
     }
 
-    std::string replyString = reply.dump();
-
-    if (mProxy->sendMessage(reinterpret_cast<ProxyMessages&>(reply)) < 0)
-    {
-        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Failed to send message via proxy.");
-    }
+    std::vector<char> replyVec(reply.dump().length());
+    std::string replyStr = reply.dump();
+    std::copy(replyStr.begin(), replyStr.end(), replyVec.begin());
+    return replyVec;
 }
 
 
@@ -206,8 +190,7 @@ void Updater::processRequest(nlohmann::json& requestJ)
  */
 void Updater::joinThread(void)
 {
-    this->mainThread.join();
-
+    progressThread.join();
     delete this->serverWebApp;
     delete this->serverMainApp;
 }

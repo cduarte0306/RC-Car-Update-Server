@@ -15,17 +15,19 @@
 #include "nlohmann/json.hpp"
 #include "utils/logger.hpp"
 #include <vector>
+#include <iostream>
 
-Proxy::Proxy(Msg::CircularBuffer<nlohmann::json>& buff)
-    : messageBuffer(buff)
+Proxy::Proxy()
 {
     m_MainAppSocket = new Network::TcpServer(io_context, "lo", "lo", MAIN_APP_PROXY_PORT, 0);
     m_WebAppSocket  = new Network::TcpServer(io_context, "lo", "lo", WEB_APP_PROXY_PORT,  0);
 
-    m_MainAppSocket->setOnConnectionEstablished(
+    m_MainAppSocket->setOnConnectionEstablished
+    (
         [this]() { Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Main app connection established\r\n"); }
     );
-    m_WebAppSocket->setOnConnectionEstablished(
+    m_WebAppSocket->setOnConnectionEstablished
+    (
         [this]() { Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Web app connection established\r\n"); }
     );
 
@@ -61,6 +63,7 @@ int Proxy::processRequest(std::vector<char>& data)
     const ProxyMsgHdr* header = reinterpret_cast<const ProxyMsgHdr*>(data.data());
     const uint8_t* payload = reinterpret_cast<const uint8_t*>(data.data() + sizeof(ProxyMsgHdr));
     size_t payloadLength = data.size() - sizeof(ProxyMsgHdr);
+    std::vector<char> replyVec;
 
     using json = nlohmann::json;
     
@@ -69,21 +72,15 @@ int Proxy::processRequest(std::vector<char>& data)
     {
         case UpdaterRouteAddr:
         {
-            // Handle local route
-            json msg;
-
-            try
+            if (onDataReceived)
             {
-                msg = json::parse(payload, payload + payloadLength);
+                nlohmann::json requestJson = nlohmann::json::parse(payload, payload + payloadLength);
+                replyVec = onDataReceived(requestJson);
             }
-            catch(const std::exception& e)
+            else
             {
-                Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
-                return -1; // Return error if JSON parsing fails
+                Logger::getLoggerInst()->log(Logger::LOG_LVL_WARN, "No callback set for UpdaterRouteAddr\r\n");
             }
-
-            msg["source"] = header->srcAddr;
-            messageBuffer.push(msg);
             break;
         }
         case WebAppRouteAddr:
@@ -95,57 +92,35 @@ int Proxy::processRequest(std::vector<char>& data)
             m_MainAppSocket->transmit(payload, payloadLength);
             break;
         default:
-            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown route address: %s", std::to_string(header->destAddr).c_str());
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown route address: %i\r\n", header->destAddr);
             return -1; // Unknown route
     }
-    return 0;
-}
 
-int Proxy::sendMessage(ProxyMessages& msg)
-{
-    int source = -1;
-    try
+    // If a reply was generated, send it back to the source
+    if (!replyVec.empty())
     {
-        if (msg.contains("source"))
+        // Build reply
+        int reqSrc = header->srcAddr;
+        std::vector<char> fullReply(sizeof(ProxyMsgHdr) + replyVec.size());
+        ProxyMsgHdr* replyHeader = reinterpret_cast<ProxyMsgHdr*>(fullReply.data());
+        replyHeader->srcAddr  = UpdaterRouteAddr;
+        replyHeader->destAddr = header->srcAddr;
+        replyHeader->len = static_cast<int>(replyVec.size());
+        std::copy(replyVec.begin(), replyVec.end(), fullReply.begin() + sizeof(ProxyMsgHdr));
+
+        if (reqSrc == WebAppRouteAddr)
         {
-            source = msg["source"].get<int>();
+            m_WebAppSocket->transmit(reinterpret_cast<const uint8_t*>(fullReply.data()), fullReply.size());
+        }
+        else if (reqSrc == MainAppRouteAddr)
+        {
+            m_MainAppSocket->transmit(reinterpret_cast<const uint8_t*>(fullReply.data()), fullReply.size());
         }
         else
         {
-            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Source not specified in message");
-            return -1; // Source not specified
-        }
-
-        msg.erase("source");
-
-        // Route
-        ProxyMsgHdr header;
-        header.srcAddr = source;
-        header.destAddr = source; // Assuming the destination is the same as the source for routing
-        std::string serialized = msg.dump();
-        std::vector<char> data(sizeof(ProxyMsgHdr) + serialized.size());
-        std::memcpy(data.data(), &header, sizeof(ProxyMsgHdr));
-        std::memcpy(data.data() + sizeof(ProxyMsgHdr), serialized.data(), serialized.size());
-        
-        if (source == WebAppRouteAddr)
-        {
-            m_WebAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
-        }
-        else if (source == MainAppRouteAddr)
-        {
-            m_MainAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
-        }
-        else
-        {
-            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown source address: %s", std::to_string(source).c_str());
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown source address: %i\r\n", header->srcAddr);
             return -1; // Unknown source
         }
     }
-    catch(const std::exception& e)
-    {
-        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, e.what());
-        return -1; // Return error if JSON parsing fails
-    }
-
     return 0;
 }

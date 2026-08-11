@@ -45,15 +45,12 @@ private:
     static ipc_message updateStatus;
 
     Proxy* mProxy = nullptr;
-    Msg::CircularBuffer<nlohmann::json> mMessageBuffer;
 
     Network::TcpServer* serverWebApp  = nullptr;
     Network::TcpServer* serverMainApp = nullptr;
-    std::thread mainThread;
 
     std::thread progressThread;
     std::atomic<bool> progressThreadRunning{true};
-    std::atomic<bool> mainThreadRunning{true};
     std::atomic<int> progressSocketFd{-1};
     std::atomic<unsigned int> installPercent{0};
 
@@ -61,7 +58,7 @@ private:
     static int getUpdateProgress(ipc_message *msg);
     static int updateEnd(RECOVERY_STATUS status);
 
-    void processRequest(nlohmann::json& requestJ);
+    std::vector<char> processRequest(nlohmann::json& requestJson);
     void progressThreadHandler(void);
 };
 

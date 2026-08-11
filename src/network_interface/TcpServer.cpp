@@ -158,6 +158,7 @@ bool TcpServer::transmit(const uint8_t* pBuf, size_t length)
 {
     if (pBuf == nullptr || length == 0)
     {
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "TCP transmit error: Invalid buffer or length\r\n");
         return false;
     }
 

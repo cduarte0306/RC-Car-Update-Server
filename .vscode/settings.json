@@ -1,4 +1,21 @@
 {
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.compilerPath": "/opt/poky/5.0.11/sysroots/x86_64-pokysdk-linux/usr/bin/aarch64-poky-linux/aarch64-poky-linux-g++",
+    "C_Cpp.default.cppStandard": "gnu++20",
+    "C_Cpp.default.intelliSenseMode": "linux-gcc-arm64",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/**",
+        "/opt/poky/5.0.11/sysroots/armv8a-poky-linux/usr/include",
+        "/opt/poky/5.0.11/sysroots/armv8a-poky-linux/usr/include/c++"
+    ],
+    "C_Cpp.default.defines": [
+        "__GNUC__",
+        "HAVE_CUDA=1"
+    ],
+    "C_Cpp.default.cIntelliSenseEngine": "Tag Parser",
+    "cmake.generator": "Unix Makefiles",
+    "cmake.buildArgs": ["-j16"],
     "python.autoComplete.extraPaths": [
         "${workspaceFolder}/sources/poky/bitbake/lib",
         "${workspaceFolder}/sources/poky/meta/lib"
@@ -81,20 +98,15 @@
         "typeinfo": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "buffer": "cpp",
-        "executor": "cpp",
-        "internet": "cpp",
-        "io_context": "cpp",
-        "netfwd": "cpp",
-        "socket": "cpp",
-        "timer": "cpp",
-        "future": "cpp",
         "charconv": "cpp",
         "complex": "cpp",
         "source_location": "cpp",
         "typeindex": "cpp",
-        "format": "cpp"
-    },
-    "cmake.buildArgs": ["-j16"],
-    "cmake.generator": "Unix Makefiles"
+        "format": "cpp",
+        "future": "cpp",
+        "shared_mutex": "cpp",
+        "cfenv": "cpp",
+        "stdfloat": "cpp",
+        "coroutine": "cpp"
+    }
 }
