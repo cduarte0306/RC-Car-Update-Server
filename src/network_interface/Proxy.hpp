@@ -61,15 +61,29 @@ private:
         uint8_t    payload[512];    /*!< Proxy message payload */
     };
 
+    constexpr static size_t MaxPayloadLen = sizeof(ProxyMessage::payload); /*!< Sanity bound for a single message's payload length */
+
+    /**
+     * @brief Buffer raw bytes from a socket and dispatch exactly one call to
+     * processRequest() per complete framed message (header.len prefixed).
+     * TCP is a byte stream, so a single socket read can contain a partial
+     * message, one message, or several concatenated messages - this
+     * reassembles message boundaries before they're parsed as JSON.
+     *
+     * @param data Raw bytes just received from the socket
+     * @param accumBuffer Per-connection accumulation buffer for reassembly
+     */
+    void onSocketData(std::vector<char>& data, std::vector<char>& accumBuffer);
+
     /**
      * @brief Process incoming proxy requests
      *
-     * @param data Reference to the data vector containing the request
+     * @param data Reference to the data vector containing exactly one framed request
      * @return int Returns 0 on success, -1 on failure
      */
     int processRequest(std::vector<char>& data);
 
-    constexpr static uint16_t WEB_APP_PROXY_PORT = 8080; /*!< Web application proxy port */
+    constexpr static uint16_t WEB_APP_PROXY_PORT  = 8080; /*!< Web application proxy port */
     constexpr static uint16_t MAIN_APP_PROXY_PORT = 9090; /*!< Main application proxy port */
 
     // Boost thread
@@ -81,6 +95,9 @@ private:
     Network::TcpServer* m_MainAppSocket = nullptr; /*!< Pointer to the main application socket */
     std::map<std::string , int> proxyPorts; /*!< Map of proxy addresses to port numbers */
     boost::asio::io_context io_context;
+
+    std::vector<char> m_MainAppRxAccum; /*!< Reassembly buffer for the main app socket */
+    std::vector<char> m_WebAppRxAccum;  /*!< Reassembly buffer for the web app socket */
 };
 
 #pragma endregion

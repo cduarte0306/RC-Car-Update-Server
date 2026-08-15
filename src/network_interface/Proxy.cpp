@@ -31,8 +31,8 @@ Proxy::Proxy()
         [this]() { Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Web app connection established\r\n"); }
     );
 
-    m_MainAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
-    m_WebAppSocket->startReceive(std::bind(&Proxy::processRequest, this, std::placeholders::_1));
+    m_MainAppSocket->startReceive([this](std::vector<char>& data) { onSocketData(data, m_MainAppRxAccum); });
+    m_WebAppSocket->startReceive([this](std::vector<char>& data) { onSocketData(data, m_WebAppRxAccum); });
 
     threadPool.create_thread([this]() { io_context.run(); });
 }
@@ -53,6 +53,39 @@ Proxy::~Proxy()
     threadPool.join_all();
 }
 
+void Proxy::onSocketData(std::vector<char>& data, std::vector<char>& accumBuffer)
+{
+    accumBuffer.insert(accumBuffer.end(), data.begin(), data.end());
+
+    // TCP is a byte stream: a single read can hold a partial message, exactly
+    // one message, or several messages concatenated together. Only hand
+    // processRequest() a slice that is exactly one framed message, and hold
+    // back anything incomplete for the next read.
+    while (accumBuffer.size() >= sizeof(ProxyMsgHdr))
+    {
+        const ProxyMsgHdr* header = reinterpret_cast<const ProxyMsgHdr*>(accumBuffer.data());
+        if (header->len < 0 || static_cast<size_t>(header->len) > MaxPayloadLen)
+        {
+            Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR,
+                "Proxy: invalid message length %d, discarding %zu buffered byte(s)\r\n",
+                header->len, accumBuffer.size());
+            accumBuffer.clear();
+            return;
+        }
+
+        const size_t totalMsgLen = sizeof(ProxyMsgHdr) + static_cast<size_t>(header->len);
+        if (accumBuffer.size() < totalMsgLen)
+        {
+            break; // Rest of the message hasn't arrived yet.
+        }
+
+        std::vector<char> message(accumBuffer.begin(), accumBuffer.begin() + totalMsgLen);
+        processRequest(message);
+
+        accumBuffer.erase(accumBuffer.begin(), accumBuffer.begin() + totalMsgLen);
+    }
+}
+
 int Proxy::processRequest(std::vector<char>& data)
 {
     if (data.size() < sizeof(ProxyMsgHdr))
@@ -62,7 +95,12 @@ int Proxy::processRequest(std::vector<char>& data)
 
     const ProxyMsgHdr* header = reinterpret_cast<const ProxyMsgHdr*>(data.data());
     const uint8_t* payload = reinterpret_cast<const uint8_t*>(data.data() + sizeof(ProxyMsgHdr));
-    size_t payloadLength = data.size() - sizeof(ProxyMsgHdr);
+    if (header->len < 0 || sizeof(ProxyMsgHdr) + static_cast<size_t>(header->len) > data.size())
+    {
+        Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Proxy: message length %d inconsistent with buffer size %zu\r\n", header->len, data.size());
+        return -1;
+    }
+    size_t payloadLength = static_cast<size_t>(header->len);
     std::vector<char> replyVec;
 
     using json = nlohmann::json;
@@ -74,8 +112,21 @@ int Proxy::processRequest(std::vector<char>& data)
         {
             if (onDataReceived)
             {
-                nlohmann::json requestJson = nlohmann::json::parse(payload, payload + payloadLength);
-                replyVec = onDataReceived(requestJson);
+                try
+                {
+                    nlohmann::json requestJson = nlohmann::json::parse(payload, payload + payloadLength);
+                    replyVec = onDataReceived(requestJson);
+                }
+                catch (const nlohmann::json::parse_error& e)
+                {
+                    json j =
+                    {
+                        {"status", false}
+                    };
+                    std::copy(j.dump().begin(), j.dump().end(), std::back_inserter(replyVec));
+                    Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "JSON parse error: %s\r\n", e.what());
+                    return -1; // JSON parse error
+                }
             }
             else
             {

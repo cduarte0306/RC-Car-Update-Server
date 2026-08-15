@@ -31,6 +31,13 @@ public:
     }
 
 private:
+    struct UpdaterIface
+    {
+        int  cmd;    // Updater command
+        bool status; // Status code
+        int  len;    // Payload length
+    };
+
     enum {
         INITIATE_UPDATE,
         READ_UPDATE_STATUS

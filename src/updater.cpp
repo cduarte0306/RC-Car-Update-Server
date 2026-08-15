@@ -91,7 +91,6 @@ void Updater::progressThreadHandler(void)
             continue;
         }
 
-        Logger::getLoggerInst()->log(Logger::LOG_LVL_INFO, "Progress: %d%%\r\n", msg.cur_percent);
         installPercent.store(msg.cur_percent);
     }
 
