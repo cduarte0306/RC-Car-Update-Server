@@ -136,11 +136,11 @@ int Proxy::processRequest(std::vector<char>& data)
         }
         case WebAppRouteAddr:
             // Handle web app route
-            m_WebAppSocket->transmit(payload, payloadLength);
+            m_WebAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
             break;
         case MainAppRouteAddr:
             // Handle main app route
-            m_MainAppSocket->transmit(payload, payloadLength);
+            m_MainAppSocket->transmit(reinterpret_cast<const uint8_t*>(data.data()), data.size());
             break;
         default:
             Logger::getLoggerInst()->log(Logger::LOG_LVL_ERROR, "Unknown route address: %i\r\n", header->destAddr);
