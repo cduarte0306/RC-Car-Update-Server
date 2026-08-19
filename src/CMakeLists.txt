@@ -34,8 +34,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/src/
 )
+if (DEFINED OE_BUILD)
+  find_package(nlohmann_json REQUIRED)
+endif()
 
-find_package(nlohmann_json REQUIRED)
 target_link_libraries(${PROJECT_NAME}
   SWUpdate::Client
   nlohmann_json::nlohmann_json
