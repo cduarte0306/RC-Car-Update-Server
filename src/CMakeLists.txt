@@ -35,6 +35,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_SOURCE_DIR}/src/
 )
 
+find_package(nlohmann_json REQUIRED)
 target_link_libraries(${PROJECT_NAME}
   SWUpdate::Client
   nlohmann_json::nlohmann_json
