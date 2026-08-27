@@ -83,8 +83,8 @@ private:
      */
     int processRequest(std::vector<char>& data);
 
-    constexpr static uint16_t WEB_APP_PROXY_PORT  = 8080; /*!< Web application proxy port */
-    constexpr static uint16_t MAIN_APP_PROXY_PORT = 9090; /*!< Main application proxy port */
+    constexpr static uint16_t WEB_APP_PROXY_PORT  = 9091; /*!< Web application facing proxy port */
+    constexpr static uint16_t MAIN_APP_PROXY_PORT = 9090; /*!< Main application facing proxy port */
 
     // Boost thread
     boost::thread_group threadPool;
